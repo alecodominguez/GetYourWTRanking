@@ -168,6 +168,15 @@
       results are already present for the same event. If points are slightly off, adjust "PTS AVAIL." or "OVERRIDE PTS." to get the right number of points. </p>
   </div>
 
+  <div class="card panel">
+    <h2>Quality of Field Factor (QFF)</h2>
+    <p class="helptext">Continental Triathlon Cups and Championships get an extra field-strength bonus that varies by continent, based on the top-400 ranked athletes per continent as of Dec 31 the prior year (see the ranking criteria document above). These rates are fixed to World Triathlon's current published figures and applied automatically to any matching Continental Cup/Championship result &mdash; they aren't user-editable here, since they're not derivable from a results file and change periodically at World Triathlon's discretion.</p>
+    <table class="qff-table" id="qffTable">
+      <thead><tr><th>Continent</th><th>Continental Cup</th><th>Continental Championship</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
   <div class="toolbar">
     <button class="btn btn-primary" id="btnAddRow">+ Add race</button>
     <button class="btn btn-outline" id="btnImportCsv">Import results (.xlsx)</button>
@@ -246,22 +255,35 @@ const EVENT_TIERS = [
   { name: "World Triathlon Cup", points: 500, qff: false, top5Bonus: false },
   { name: "World Triathlon Indoor Cup", points: 500, qff: false, top5Bonus: false },
   { name: "Supertri E Triathlon Championship Finals", points: 500, qff: false, top5Bonus: false },
-  { name: "Continental Triathlon Elite Championships", points: 400, qff: true, top5Bonus: true },
-  { name: "Continental Triathlon Cup", points: 250, qff: true, top5Bonus: false },
+  { name: "Continental Triathlon Elite Championships", points: 400, qff: true, qffCategory: 'championship', top5Bonus: true },
+  { name: "Continental Triathlon Cup", points: 250, qff: true, qffCategory: 'cup', top5Bonus: false },
   { name: "World Triathlon U23 Championships", points: 250, qff: false, top5Bonus: false },
   { name: "FISU World Championships", points: 250, qff: false, top5Bonus: false },
   { name: "Supertri E Triathlon Championship Series", points: 250, qff: false, top5Bonus: false },
   { name: "World Triathlon Junior Championships", points: 200, qff: false, top5Bonus: false },
-  { name: "Continental Triathlon U23 Championships", points: 150, qff: true, top5Bonus: false },
+  { name: "Continental Triathlon U23 Championships", points: 150, qff: true, qffCategory: 'championship', top5Bonus: false },
   { name: "Triathlon Regional Championships", points: 150, qff: false, top5Bonus: false },
   { name: "Triathlon Development Regional Cup", points: 125, qff: false, top5Bonus: false },
-  { name: "Continental Triathlon Junior Championships", points: 100, qff: true, top5Bonus: false },
+  { name: "Continental Triathlon Junior Championships", points: 100, qff: true, qffCategory: 'championship', top5Bonus: false },
   { name: "National Triathlon Championships", points: 50, qff: false, top5Bonus: false },
   { name: "Custom / other", points: 0, qff: false, top5Bonus: false },
 ];
 
 // Top 5 bonus percentages applied descending from 1st to 5th place
 const TOP5_BONUS = [0.25, 0.20, 0.15, 0.10, 0.05];
+
+// Continents recognized for Quality of Field Factor lookup, matched against event name text.
+const CONTINENTS = ['africa', 'americas', 'asia', 'europe', 'oceania'];
+const CONTINENT_LABELS = { africa: 'Africa', americas: 'Americas', asia: 'Asia', europe: 'Europe', oceania: 'Oceania' };
+
+/* ---------- Fixed Quality of Field Factor rates (World Triathlon, current ranking cycle) ----------
+   Not derivable from an athlete's results file — set by World Triathlon from top-400-per-continent
+   field strength as of Dec 31 the prior year, and republished periodically. Update these two objects
+   each cycle; not exposed as editable in the UI. */
+const QFF_RATES = {
+  cup:          { africa: 2, americas: 12, asia: 6,   europe: 20, oceania: 2 },
+  championship: { africa: 2, americas: 17, asia: 9.2, europe: 30, oceania: 8 },
+};
 
 /* ---------- Fixed official criteria (World Triathlon Ranking) ----------
    https://cms.triathlon.org/download-file/world-triathlon-ranking-criteria */
@@ -312,7 +334,7 @@ function tierIndexByName(name){
 function classifyTier(eventName){
   if(!eventName) return -1;
   const n = eventName.toLowerCase();
-  const isContinental = /\b(africa|americas|asia|europe|oceania)\b/.test(n);
+  const isContinental = !!detectContinent(n);
 
   if(/grand final|championship finals/.test(n)) return tierIndexByName("World Triathlon Championship Finals");
   if(/olympic test event/.test(n)) return tierIndexByName("Olympic Test Event");
@@ -321,18 +343,42 @@ function classifyTier(eventName){
   if(/supertri/.test(n)) return tierIndexByName("Supertri E Triathlon Championship Series");
   if(/championship series|\bwtcs\b/.test(n)) return tierIndexByName("World Triathlon Championship Series");
   if(/indoor cup/.test(n)) return tierIndexByName("World Triathlon Indoor Cup");
-  if(isContinental && /u23/.test(n) && /championship/.test(n)) return tierIndexByName("Continental Triathlon U23 Championships");
-  if(isContinental && /junior/.test(n) && /championship/.test(n)) return tierIndexByName("Continental Triathlon Junior Championships");
-  if(isContinental && /championship/.test(n)) return tierIndexByName("Continental Triathlon Elite Championships");
-  if(isContinental && /cup/.test(n)) return tierIndexByName("Continental Triathlon Cup");
   if(/fisu/.test(n)) return tierIndexByName("FISU World Championships");
+  if(/development regional cup/.test(n)) return tierIndexByName("Triathlon Development Regional Cup");
+
+  if(isContinental){
+    // Event titles are sometimes compound, e.g. "Asia Triathlon Cup and Southeast Asia Championships
+    // Putrajaya" — a Cup that a regional federation bundled with a second championship title in the same
+    // name. Classify by whichever keyword ("cup" vs "championship") appears first/leads the title, since
+    // that's the event the athlete actually entered; ignore a trailing keyword tacked on afterward.
+    const cupIdx = n.search(/\bcup\b/);
+    const champIdx = n.search(/\bchampionships?\b/);
+    const cupLeads = cupIdx > -1 && (champIdx === -1 || cupIdx < champIdx);
+    if(cupLeads) return tierIndexByName("Continental Triathlon Cup");
+    if(champIdx > -1){
+      if(/u23/.test(n)) return tierIndexByName("Continental Triathlon U23 Championships");
+      if(/junior/.test(n)) return tierIndexByName("Continental Triathlon Junior Championships");
+      return tierIndexByName("Continental Triathlon Elite Championships");
+    }
+  }
+
   if(/u23.*championship/.test(n)) return tierIndexByName("World Triathlon U23 Championships");
   if(/junior.*championship/.test(n)) return tierIndexByName("World Triathlon Junior Championships");
-  if(/development regional cup/.test(n)) return tierIndexByName("Triathlon Development Regional Cup");
   if(/regional championship/.test(n)) return tierIndexByName("Triathlon Regional Championships");
   if(/national championship/.test(n)) return tierIndexByName("National Triathlon Championships");
   if(/world (triathlon )?cup/.test(n)) return tierIndexByName("World Triathlon Cup");
   return -1;
+}
+
+/**
+ * Detects which continent (if any) is named in an event title, for Quality of Field Factor lookup.
+ * @param {string} eventName - Raw event name text.
+ * @returns {string} One of CONTINENTS, or '' if no continent is named.
+ */
+function detectContinent(eventName){
+  if(!eventName) return '';
+  const n = eventName.toString().toLowerCase();
+  return CONTINENTS.find(c => new RegExp(`\\b${c}\\b`).test(n)) || '';
 }
 
 /**
@@ -362,6 +408,18 @@ function saveState(){
     asOfDate: document.getElementById('asOfDate').value,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ rows, idCounter, settings }));
+}
+
+/**
+ * Renders the fixed, read-only Quality of Field Factor table (one row per continent).
+ */
+function renderQffTable(){
+  const tbody = document.querySelector('#qffTable tbody');
+  tbody.innerHTML = CONTINENTS.map(c=>`<tr>
+    <td>${CONTINENT_LABELS[c]}</td>
+    <td>${QFF_RATES.cup[c]}%</td>
+    <td>${QFF_RATES.championship[c]}%</td>
+  </tr>`).join('');
 }
 
 /**
@@ -446,6 +504,12 @@ function computePointsScored(row, decay){
   let pts = avail * Math.pow(1 - decay, pos - 1);
   if(top5BonusApplies(row)){
     pts = pts * (1 + TOP5_BONUS[pos-1]);
+  }
+  const tier = EVENT_TIERS[row.tierIdx];
+  if(tier && tier.qff && tier.qffCategory){
+    const continent = detectContinent(row.event);
+    const rate = continent ? (QFF_RATES[tier.qffCategory][continent] || 0) : 0;
+    if(rate) pts = pts * (1 + rate / 100);
   }
   return pts;
 }
@@ -826,6 +890,7 @@ function init(){
   if(!document.getElementById('asOfDate').value){
     document.getElementById('asOfDate').value = todayISO();
   }
+  renderQffTable();
   compute();
 }
 init();
