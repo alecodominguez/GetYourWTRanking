@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Triathlon Ranking Points Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    /* Tokens sampled from triathlon.org */
+    --black:#000000; --ink:#17181c; --gray-600:#595d69; --gray-300:#c8cad0;
+    --gray-200:#ededed; --gray-100:#f2f2f2; --gray-50:#f5f5f5;
+    --blue-accent:#214ee4; --blue:#1863dc; --blue-deep:#0048ff; --blue-light:#e6f0ff;
+    --green:#00662b; --green-bg:#e3f2e8;
+    --amber:#9a6a00; --amber-bg:#fbf1de;
+    --red:#c0392b;
+    --radius:8px; --radius-sm:4px;
+    --shadow:0 1px 2px rgba(23,24,28,.06);
+    font-family:'Manrope',sans-serif,-apple-system,"system-ui","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--gray-50);color:var(--ink);line-height:1.45;}
+  header.top{background:var(--black);color:#fff;padding:22px 28px;border-bottom:3px solid var(--blue);}
+  .wordmark{display:flex;align-items:baseline;gap:8px;}
+  .wordmark .mark{width:10px;height:10px;background:var(--blue);border-radius:50%;display:inline-block;transform:translateY(-1px);}
+  header.top .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:#9aa0ad;font-weight:700;margin:0 0 4px;}
+  header.top h1{margin:0;font-size:22px;font-weight:800;letter-spacing:.1px;}
+  header.top p{margin:6px 0 0;font-size:13px;color:#b5bac4;max-width:640px;}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+  @media(max-width:800px){.grid{grid-template-columns:1fr;}}
+  .card{background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;}
+  .stat-card .label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-600);font-weight:700;}
+  .stat-card .value{font-size:30px;font-weight:800;color:var(--ink);margin-top:4px;}
+  .stat-card .sub{font-size:12px;color:var(--gray-600);margin-top:2px;}
+  .stat-card.net{background:linear-gradient(135deg,var(--blue),var(--blue-deep));border-color:transparent;color:#fff;}
+  .stat-card.net .label{color:#cfe0ff;}
+  .stat-card.net .value{color:#fff;}
+  .stat-card.net .sub{color:#cfe0ff;}
+  .panel{margin-bottom:18px;}
+  .panel h2{font-size:13px;margin:0 0 12px;color:var(--ink);text-transform:uppercase;letter-spacing:.06em;font-weight:800;}
+  .controls-row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:11.5px;color:var(--gray-600);font-weight:700;}
+  .field input,.field select{border:1px solid var(--gray-300);border-radius:var(--radius-sm);padding:7px 9px;font-size:13.5px;background:#fff;color:var(--ink);font-family:inherit;}
+  .field input[type=number]{width:80px;}
+  .btn{border:none;border-radius:var(--radius-sm);padding:9px 16px;font-size:13.5px;font-weight:700;cursor:pointer;transition:filter .1s,background .1s;font-family:inherit;}
+  .btn:hover{filter:brightness(0.95);}
+  .btn-primary{background:var(--blue);color:#fff;}
+  .btn-secondary{background:var(--gray-50);color:var(--blue-accent);border:1px solid var(--gray-200);}
+  .btn-outline{background:#fff;color:var(--blue-accent);border:1px solid var(--blue-accent);}
+  .btn-danger{background:#fff;color:var(--red);border:1px solid #f2c6c0;}
+  .btn-sm{padding:4px 10px;font-size:12px;}
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--gray-600);border-bottom:2px solid var(--gray-200);padding:8px 8px;white-space:nowrap;font-weight:800;}
+  tbody td{padding:6px 8px;border-bottom:1px solid var(--gray-100);vertical-align:middle;}
+  tbody tr.counted{background:var(--green-bg);}
+  tbody tr.expired{opacity:.5;}
+  tbody tr.future{background:var(--blue-light);}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700;}
+  .pill.current{background:var(--blue-light);color:var(--blue-accent);}
+  .pill.previous{background:var(--amber-bg);color:var(--amber);}
+  .pill.expired{background:var(--gray-100);color:var(--gray-600);}
+  .pill.counted{background:var(--green);color:#fff;}
+  .pill.not-counted{background:var(--gray-200);color:var(--gray-600);}
+  table input, table select{width:100%;border:1px solid transparent;background:transparent;border-radius:var(--radius-sm);padding:3px 5px;font-size:13px;color:var(--ink);font-family:inherit;}
+  table input:hover,table select:hover,table input:focus,table select:focus{border-color:var(--gray-300);background:#fff;}
+  table input[type=number]{width:60px;}
+  table input[type=date]{width:130px;}
+  .col-event{min-width:210px;}
+  .col-tier{min-width:190px;}
+  .tablewrap{overflow-x:auto;background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius);box-shadow:var(--shadow);padding:6px 4px;}
+  .empty{padding:40px;text-align:center;color:var(--gray-600);font-size:13.5px;}
+  .helptext{font-size:12px;color:var(--gray-600);margin-top:8px;}
+  details.ref{background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 16px;margin-bottom:18px;}
+  details.ref summary{cursor:pointer;font-weight:700;font-size:13.5px;color:var(--blue-accent);}
+  details.ref table{margin-top:10px;}
+  .helptext a{color:var(--blue-accent);font-weight:600;text-decoration:none;}
+  .helptext a:hover{text-decoration:underline;}
+  .criteria-box{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;}
+  .criteria-item{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);padding:8px 12px;min-width:150px;}
+  .criteria-item .criteria-label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--gray-600);font-weight:700;}
+  .criteria-item .criteria-value{display:block;font-size:15px;font-weight:800;color:var(--ink);margin-top:2px;}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(23,24,28,.6);display:none;align-items:center;justify-content:center;z-index:50;}
+  .modal-backdrop.show{display:flex;}
+  .modal{background:#fff;border-radius:12px;padding:22px;width:92%;max-width:640px;max-height:85vh;overflow:auto;}
+  .modal h3{margin:0 0 12px;color:var(--ink);font-weight:800;}
+  .maprow{display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:center;margin-bottom:8px;font-size:13px;}
+  .maprow select{border:1px solid var(--gray-300);border-radius:var(--radius-sm);padding:6px;font-family:inherit;}
+  .preview{font-size:12px;border-collapse:collapse;width:100%;margin-top:10px;}
+  .preview th,.preview td{border:1px solid var(--gray-200);padding:4px 6px;}
+  footer.note{font-size:12px;color:var(--gray-600);text-align:center;margin-top:30px;padding-top:16px;border-top:1px solid var(--gray-200);}
+  .badge-weight{font-size:11px;background:var(--gray-50);border-radius:var(--radius-sm);padding:3px 7px;color:var(--gray-600);}
+  .flex-between{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <p class="eyebrow">Athlete Ranking Tools</p>
+  <div class="wordmark"><span class="mark"></span><h1>Ranking Points Calculator</h1></div>
+  <p>Upload your results, add the races you're planning to enter, and see projected World Triathlon Ranking points based on the official scoring criteria.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="grid">
+    <div class="card stat-card">
+      <div class="label">Current Period Points</div>
+      <div class="value" id="statCurrent">0.0</div>
+      <div class="sub" id="statCurrentSub">Top 6 results, trailing 52 weeks</div>
+    </div>
+    <div class="card stat-card">
+      <div class="label">Previous Period Points</div>
+      <div class="value" id="statPrevious">0.0</div>
+      <div class="sub" id="statPreviousSub">Top 6 results, weeks 53&ndash;104, weighted</div>
+    </div>
+    <div class="card stat-card net">
+      <div class="label">Net Ranking Points</div>
+      <div class="value" id="statNet">0.0</div>
+      <div class="sub" id="statNetSub">As of &mdash;</div>
+    </div>
+  </div>
+
+  <div class="card panel">
+    <h2>Ranking Period</h2>
+    <div class="controls-row">
+      <div class="field">
+        <label for="asOfDate">As-of date</label>
+        <input type="date" id="asOfDate">
+      </div>
+    </div>
+    <div class="criteria-box">
+      <div class="criteria-item"><span class="criteria-label">Previous-period weight</span><span class="criteria-value">1/3 (33.3%)</span></div>
+      <div class="criteria-item"><span class="criteria-label">Position decay rate</span><span class="criteria-value">7.5% per position</span></div>
+      <div class="criteria-item"><span class="criteria-label">Current window</span><span class="criteria-value">52 weeks</span></div>
+      <div class="criteria-item"><span class="criteria-label">Previous window</span><span class="criteria-value">weeks 53&ndash;104</span></div>
+      <div class="criteria-item"><span class="criteria-label">Results counted</span><span class="criteria-value">best 6 per period</span></div>
+    </div>
+    <p class="helptext">These scoring rules are fixed to the official World Triathlon Ranking criteria and can't be changed here: points decrease 7.5% per position, the best 6 results from the trailing 52 weeks count at full value, and the best 6 results from the prior 53&ndash;104 weeks count at 1/3 value. The Top-5 bonus is applied automatically for Continental Triathlon Championships (e.g. "Europe/Americas/Africa/Oceania/Asia Triathlon Championships") &mdash; it's not user-editable. See the full <a href="https://cms.triathlon.org/download-file/world-triathlon-ranking-criteria" target="_blank" rel="noopener">World Triathlon Ranking</a> document for details. Quality of Field Factor and per-event caps are not auto-applied; adjust "Points Available" manually if you know the QFF-adjusted figure.</p>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn btn-primary" id="btnAddRow">+ Add race</button>
+    <button class="btn btn-outline" id="btnImportCsv">Import results (.xlsx)</button>
+    <button class="btn btn-secondary" id="btnExportCsv">Export table (CSV)</button>
+    <button class="btn btn-danger" id="btnClearAll">Clear all</button>
+    <input type="file" id="csvFileInput" accept=".xlsx,.xls" style="display:none;">
+  </div>
+
+  <details class="ref">
+    <summary>Official points table (World Triathlon Ranking, Jan 2025)</summary>
+    <table id="refTable">
+      <thead><tr><th>Event</th><th>Points to winner</th><th>Quality of Field Factor</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </details>
+
+  <div class="tablewrap">
+    <table id="resultsTable">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th class="col-event">Event</th>
+          <th>Date</th>
+          <th>Pos</th>
+          <th class="col-tier">Tier (auto)</th>
+          <th>Pts avail.</th>
+          <th>Top-5 bonus</th>
+          <th>Override pts</th>
+          <th>Pts scored</th>
+          <th>Window</th>
+          <th>Counted</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+    <div class="empty" id="emptyState">No races yet. Import a results .xlsx file or click "Add race" to get started.</div>
+  </div>
+
+  <footer class="note">
+    All calculations run locally in your browser &mdash; no athlete data is uploaded or stored on a server. Data is kept only in this browser's local storage so you can leave and come back.
+  </footer>
+</div>
+
+<div class="modal-backdrop" id="csvModalBackdrop">
+  <div class="modal">
+    <h3>Import results (.xlsx)</h3>
+    <p class="helptext">Map the columns from your downloaded results file. We tried to auto-detect them below &mdash; adjust any that look wrong.</p>
+    <div class="field" id="sheetPickerField" style="display:none;margin-bottom:12px;">
+      <label for="sheetPicker">Sheet</label>
+      <select id="sheetPicker"></select>
+    </div>
+    <div id="mapFields"></div>
+    <table class="preview" id="csvPreview"></table>
+    <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn btn-secondary" id="btnCsvCancel">Cancel</button>
+      <button class="btn btn-primary" id="btnCsvConfirm">Import rows</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Reference data ---------- */
+const EVENT_TIERS = [
+  { name: "World Triathlon Championship Finals", points: 1250, qff: false, top5Bonus: false },
+  { name: "Olympic Games", points: 1000, qff: false, top5Bonus: false },
+  { name: "Olympic Test Event", points: 1000, qff: false, top5Bonus: false },
+  { name: "World Triathlon Championship Series", points: 1000, qff: false, top5Bonus: false },
+  { name: "World Triathlon Cup", points: 500, qff: false, top5Bonus: false },
+  { name: "World Triathlon Indoor Cup", points: 500, qff: false, top5Bonus: false },
+  { name: "Supertri E Triathlon Championship Finals", points: 500, qff: false, top5Bonus: false },
+  { name: "Continental Triathlon Elite Championships", points: 400, qff: true, top5Bonus: true },
+  { name: "Continental Triathlon Cup", points: 250, qff: true, top5Bonus: false },
+  { name: "World Triathlon U23 Championships", points: 250, qff: false, top5Bonus: false },
+  { name: "FISU World Championships", points: 250, qff: false, top5Bonus: false },
+  { name: "Supertri E Triathlon Championship Series", points: 250, qff: false, top5Bonus: false },
+  { name: "World Triathlon Junior Championships", points: 200, qff: false, top5Bonus: false },
+  { name: "Continental Triathlon U23 Championships", points: 150, qff: true, top5Bonus: false },
+  { name: "Triathlon Regional Championships", points: 150, qff: false, top5Bonus: false },
+  { name: "Triathlon Development Regional Cup", points: 125, qff: false, top5Bonus: false },
+  { name: "Continental Triathlon Junior Championships", points: 100, qff: true, top5Bonus: false },
+  { name: "National Triathlon Championships", points: 50, qff: false, top5Bonus: false },
+  { name: "Custom / other", points: 0, qff: false, top5Bonus: false },
+];
+const TOP5_BONUS = [0.25, 0.20, 0.15, 0.10, 0.05]; // index 0 = 1st place. Applies only to Continental Triathlon Elite Championships (e.g. "Europe/Americas/Africa/Oceania/Asia Triathlon Championships") per official criteria 1.6 — auto-applied by tier, not user-editable.
+
+/* ---------- Fixed official criteria (World Triathlon Ranking) ----------
+   https://cms.triathlon.org/download-file/world-triathlon-ranking-criteria
+   Not user-editable: these are the published scoring rules. */
+const CRITERIA = {
+  weight: 1/3,        // previous-period value = 1/3 of current-period value
+  decay: 0.075,        // points decrease 7.5% per position
+  currentWeeks: 52,     // current period = trailing 52 weeks
+  previousWeeks: 104,   // previous period = weeks 53-104
+  topN: 6,              // best 6 results counted per period
+};
+
+/* ---------- Tier auto-detection from event name ---------- */
+function tierIndexByName(name){
+  return EVENT_TIERS.findIndex(t=>t.name===name);
+}
+
+function classifyTier(eventName){
+  if(!eventName) return -1;
+  const n = eventName.toLowerCase();
+  const isContinental = /\b(africa|americas|asia|europe|oceania)\b/.test(n);
+
+  if(/grand final|championship finals/.test(n)) return tierIndexByName("World Triathlon Championship Finals");
+  if(/olympic test event/.test(n)) return tierIndexByName("Olympic Test Event");
+  if(/olympic games/.test(n)) return tierIndexByName("Olympic Games");
+  if(/supertri.*(championship )?finals/.test(n)) return tierIndexByName("Supertri E Triathlon Championship Finals");
+  if(/supertri/.test(n)) return tierIndexByName("Supertri E Triathlon Championship Series");
+  if(/championship series|\bwtcs\b/.test(n)) return tierIndexByName("World Triathlon Championship Series");
+  if(/indoor cup/.test(n)) return tierIndexByName("World Triathlon Indoor Cup");
+  if(isContinental && /u23/.test(n) && /championship/.test(n)) return tierIndexByName("Continental Triathlon U23 Championships");
+  if(isContinental && /junior/.test(n) && /championship/.test(n)) return tierIndexByName("Continental Triathlon Junior Championships");
+  if(isContinental && /championship/.test(n)) return tierIndexByName("Continental Triathlon Elite Championships");
+  if(isContinental && /cup/.test(n)) return tierIndexByName("Continental Triathlon Cup");
+  if(/fisu/.test(n)) return tierIndexByName("FISU World Championships");
+  if(/u23.*championship/.test(n)) return tierIndexByName("World Triathlon U23 Championships");
+  if(/junior.*championship/.test(n)) return tierIndexByName("World Triathlon Junior Championships");
+  if(/development regional cup/.test(n)) return tierIndexByName("Triathlon Development Regional Cup");
+  if(/regional championship/.test(n)) return tierIndexByName("Triathlon Regional Championships");
+  if(/national championship/.test(n)) return tierIndexByName("National Triathlon Championships");
+  if(/world (triathlon )?cup/.test(n)) return tierIndexByName("World Triathlon Cup");
+  return -1;
+}
+
+/* ---------- State ---------- */
+let rows = [];      // {id, status:'actual'|'predicted', event, date, position, tierIdx, pointsAvailable, override, represented}
+let idCounter = 1;
+let pendingCsvRows = null;
+
+const STORAGE_KEY = "wt_ranking_calc_v1";
+
+function uid(){ return idCounter++; }
+
+function todayISO(){
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return false;
+    const data = JSON.parse(raw);
+    rows = data.rows || [];
+    idCounter = data.idCounter || (rows.length+1);
+    if(data.settings){
+      const s = data.settings;
+      document.getElementById('asOfDate').value = s.asOfDate || todayISO();
+    }
+    return true;
+  }catch(e){ console.error(e); return false; }
+}
+
+function saveState(){
+  const settings = {
+    asOfDate: document.getElementById('asOfDate').value,
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ rows, idCounter, settings }));
+}
+
+/* ---------- Reference table render ---------- */
+function renderRefTable(){
+  const tbody = document.querySelector('#refTable tbody');
+  tbody.innerHTML = EVENT_TIERS.filter(t=>t.name!=="Custom / other").map(t=>
+    `<tr><td>${t.name}</td><td>${t.points}</td><td>${t.qff ? 'Yes' : 'No'}</td></tr>`
+  ).join('');
+}
+
+/* ---------- Row helpers ---------- */
+function newRow(overrides={}){
+  return Object.assign({
+    id: uid(),
+    status: 'actual',
+    event: '',
+    date: todayISO(),
+    position: '',
+    tierIdx: EVENT_TIERS.length-1,
+    pointsAvailable: 0,
+    override: '',
+    represented: '',
+    tierManuallySet: false,
+  }, overrides);
+}
+
+// Top 5 bonus is derived from the event's tier + finishing position — not a user-editable field.
+function top5BonusApplies(row){
+  const pos = parseInt(row.position);
+  const tier = EVENT_TIERS[row.tierIdx];
+  return !!(tier && tier.top5Bonus && pos >= 1 && pos <= 5);
+}
+
+function getSettings(){
+  return {
+    asOf: document.getElementById('asOfDate').value ? new Date(document.getElementById('asOfDate').value+'T00:00:00') : new Date(),
+    weight: CRITERIA.weight,
+    decay: CRITERIA.decay,
+    currentWeeks: CRITERIA.currentWeeks,
+    previousWeeks: CRITERIA.previousWeeks,
+    topN: CRITERIA.topN,
+  };
+}
+
+function weeksBetween(a,b){
+  return (a - b) / (1000*60*60*24*7);
+}
+
+function computePointsScored(row, decay){
+  if(row.override !== '' && row.override !== null && !isNaN(parseFloat(row.override))){
+    return parseFloat(row.override);
+  }
+  const pos = parseInt(row.position);
+  const avail = parseFloat(row.pointsAvailable) || 0;
+  if(!pos || pos < 1) return 0;
+  let pts = avail * Math.pow(1 - decay, pos - 1);
+  if(top5BonusApplies(row)){
+    pts = pts * (1 + TOP5_BONUS[pos-1]);
+  }
+  return pts;
+}
+
+function classifyWindow(row, settings){
+  const d = new Date(row.date+'T00:00:00');
+  const weeksAgo = weeksBetween(settings.asOf, d); // positive = in the past relative to asOf
+  if(weeksAgo < 0) return 'future'; // event after the as-of date -> not yet counted in this scenario
+  if(weeksAgo <= settings.currentWeeks) return 'current';
+  if(weeksAgo <= settings.previousWeeks) return 'previous';
+  return 'expired';
+}
+
+/* ---------- Compute + render ---------- */
+function compute(){
+  const settings = getSettings();
+  const enriched = rows.map(r=>{
+    const window = classifyWindow(r, settings);
+    const scored = computePointsScored(r, settings.decay);
+    return { r, window, scored };
+  });
+
+  const currentPool = enriched.filter(e=>e.window==='current').sort((a,b)=>b.scored-a.scored);
+  const previousPool = enriched.filter(e=>e.window==='previous').sort((a,b)=>b.scored-a.scored);
+
+  const currentCountedIds = new Set(currentPool.slice(0, settings.topN).map(e=>e.r.id));
+  const previousCountedIds = new Set(previousPool.slice(0, settings.topN).map(e=>e.r.id));
+
+  const currentTotal = currentPool.slice(0, settings.topN).reduce((s,e)=>s+e.scored,0);
+  const previousTotalRaw = previousPool.slice(0, settings.topN).reduce((s,e)=>s+e.scored,0);
+  const previousTotalWeighted = previousTotalRaw * settings.weight;
+  const netTotal = currentTotal + previousTotalWeighted;
+
+  document.getElementById('statCurrent').textContent = currentTotal.toFixed(2);
+  document.getElementById('statPrevious').textContent = previousTotalWeighted.toFixed(2);
+  document.getElementById('statNet').textContent = netTotal.toFixed(2);
+  document.getElementById('statCurrentSub').textContent = `Top ${settings.topN} results, trailing ${settings.currentWeeks} weeks`;
+  document.getElementById('statPreviousSub').textContent = `Top ${settings.topN} results, weeks ${settings.currentWeeks+1}–${settings.previousWeeks}, ×${settings.weight.toFixed(3)}`;
+  document.getElementById('statNetSub').textContent = `As of ${settings.asOf.toISOString().slice(0,10)}`;
+
+  renderTable(enriched, currentCountedIds, previousCountedIds);
+  saveState();
+}
+
+function renderTable(enriched, currentCountedIds, previousCountedIds){
+  const tbody = document.getElementById('resultsBody');
+  const emptyState = document.getElementById('emptyState');
+  if(enriched.length === 0){
+    tbody.innerHTML = '';
+    emptyState.style.display = 'block';
+    document.getElementById('resultsTable').style.display = 'none';
+    return;
+  }
+  emptyState.style.display = 'none';
+  document.getElementById('resultsTable').style.display = 'table';
+
+  enriched.sort((a,b)=> new Date(b.r.date) - new Date(a.r.date));
+
+  tbody.innerHTML = enriched.map(({r,window,scored})=>{
+    const counted = currentCountedIds.has(r.id) || previousCountedIds.has(r.id);
+    const rowClasses = [counted ? 'counted':'', window==='expired' ? 'expired':'', window==='future' ? 'future':''].filter(Boolean).join(' ');
+    const tierOptions = EVENT_TIERS.map((t,i)=>`<option value="${i}" ${i==r.tierIdx?'selected':''}>${t.name} (${t.points})</option>`).join('');
+    const windowPillClass = window==='current'?'current':(window==='previous'?'previous':(window==='expired'?'expired':'previous'));
+    const windowLabel = window.charAt(0).toUpperCase()+window.slice(1);
+    return `<tr data-id="${r.id}" class="${rowClasses}">
+      <td>
+        <select data-field="status">
+          <option value="actual" ${r.status==='actual'?'selected':''}>Actual</option>
+          <option value="predicted" ${r.status==='predicted'?'selected':''}>Predicted</option>
+        </select>
+      </td>
+      <td class="col-event"><input type="text" data-field="event" value="${escapeAttr(r.event)}" placeholder="Event name"></td>
+      <td><input type="date" data-field="date" value="${r.date}"></td>
+      <td><input type="number" data-field="position" min="0" value="${r.position}" placeholder="pos"></td>
+      <td class="col-tier"><select data-field="tierIdx">${tierOptions}</select></td>
+      <td><input type="number" data-field="pointsAvailable" min="0" value="${r.pointsAvailable}"></td>
+      <td style="text-align:center;"><span class="pill ${top5BonusApplies(r) ? 'counted':'not-counted'}">${top5BonusApplies(r) ? 'Yes' : '—'}</span></td>
+      <td><input type="number" data-field="override" value="${r.override}" placeholder="—"></td>
+      <td style="font-weight:600;">${scored.toFixed(1)}</td>
+      <td><span class="pill ${windowPillClass}">${windowLabel}</span></td>
+      <td><span class="pill ${counted ? 'counted':'not-counted'}">${counted ? 'Yes' : 'No'}</span></td>
+      <td><button class="btn btn-sm btn-danger" data-action="delete">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function escapeAttr(s){
+  return (s||'').toString().replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+/* ---------- Event delegation for table edits ---------- */
+document.getElementById('resultsBody').addEventListener('input', onTableEdit);
+document.getElementById('resultsBody').addEventListener('change', onTableEdit);
+document.getElementById('resultsBody').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-action="delete"]');
+  if(btn){
+    const tr = btn.closest('tr');
+    const id = parseInt(tr.getAttribute('data-id'));
+    rows = rows.filter(r=>r.id !== id);
+    compute();
+  }
+});
+
+function onTableEdit(e){
+  const field = e.target.getAttribute('data-field');
+  if(!field) return;
+  const tr = e.target.closest('tr');
+  const id = parseInt(tr.getAttribute('data-id'));
+  const row = rows.find(r=>r.id===id);
+  if(!row) return;
+  if(field === 'tierIdx'){
+    row.tierIdx = parseInt(e.target.value);
+    row.pointsAvailable = EVENT_TIERS[row.tierIdx].points;
+    row.tierManuallySet = true;
+  } else {
+    row[field] = e.target.value;
+    if(field === 'event' && e.type === 'change' && !row.tierManuallySet){
+      const detected = classifyTier(row.event);
+      if(detected > -1){
+        row.tierIdx = detected;
+        row.pointsAvailable = EVENT_TIERS[detected].points;
+      }
+    }
+  }
+  compute();
+}
+
+/* ---------- Toolbar actions ---------- */
+document.getElementById('btnAddRow').addEventListener('click', ()=>{
+  rows.push(newRow({ status:'predicted' }));
+  compute();
+});
+
+document.getElementById('btnClearAll').addEventListener('click', ()=>{
+  if(rows.length && !confirm('Remove all races from the table?')) return;
+  rows = [];
+  compute();
+});
+
+document.getElementById('asOfDate').addEventListener('input', compute);
+
+/* ---------- CSV export ---------- */
+document.getElementById('btnExportCsv').addEventListener('click', ()=>{
+  const settings = getSettings();
+  const header = ['Status','Event','Date','Position','Tier','PointsAvailable','Top5Bonus','OverridePoints','PointsScored'];
+  const lines = [header.join(',')];
+  rows.forEach(r=>{
+    const scored = computePointsScored(r, settings.decay);
+    const vals = [r.status, csvEscape(r.event), r.date, r.position, csvEscape(EVENT_TIERS[r.tierIdx].name), r.pointsAvailable, top5BonusApplies(r), r.override, scored.toFixed(2)];
+    lines.push(vals.join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'wt_ranking_calculator_export.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+function csvEscape(s){
+  s = (s||'').toString();
+  if(s.includes(',') || s.includes('"')){
+    return '"' + s.replace(/"/g,'""') + '"';
+  }
+  return s;
+}
+
+/* ---------- XLSX import ---------- */
+let pendingWorkbook = null;
+
+document.getElementById('btnImportCsv').addEventListener('click', ()=>{
+  document.getElementById('csvFileInput').click();
+});
+document.getElementById('csvFileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt)=>{
+    const data = new Uint8Array(evt.target.result);
+    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+    pendingWorkbook = workbook;
+    const sheetPickerField = document.getElementById('sheetPickerField');
+    const sheetPicker = document.getElementById('sheetPicker');
+    if(workbook.SheetNames.length > 1){
+      sheetPicker.innerHTML = workbook.SheetNames.map(n=>`<option value="${escapeAttr(n)}">${n}</option>`).join('');
+      sheetPickerField.style.display = 'flex';
+      sheetPicker.onchange = ()=> loadSheetIntoModal(workbook.SheetNames[sheetPicker.selectedIndex]);
+    } else {
+      sheetPickerField.style.display = 'none';
+    }
+    loadSheetIntoModal(workbook.SheetNames[0]);
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+});
+
+function loadSheetIntoModal(sheetName){
+  const ws = pendingWorkbook.Sheets[sheetName];
+  const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  const headers = data.length ? Object.keys(data[0]) : (XLSX.utils.sheet_to_json(ws, {header:1})[0] || []);
+  pendingCsvRows = data;
+  openCsvModal(headers, data);
+}
+
+const FIELD_TARGETS = [
+  { key: 'position', label: 'Position', hints: ['pos','position','rank'] },
+  { key: 'date', label: 'Event date', hints: ['date','event date'] },
+  { key: 'event', label: 'Event name', hints: ['event','event name','race'] },
+  { key: 'program', label: 'Program / category', hints: ['program','category','division'] },
+  { key: 'represented', label: 'Represented (country)', hints: ['represented','country','nation','nf'] },
+];
+
+function guessColumn(headers, hints){
+  const lower = headers.map(h=>h.toLowerCase().trim());
+  for(const hint of hints){
+    const idx = lower.findIndex(h=>h===hint);
+    if(idx>-1) return headers[idx];
+  }
+  for(const hint of hints){
+    const idx = lower.findIndex(h=>h.includes(hint));
+    if(idx>-1) return headers[idx];
+  }
+  return '';
+}
+
+function openCsvModal(headers, data){
+  const mapDiv = document.getElementById('mapFields');
+  mapDiv.innerHTML = FIELD_TARGETS.map(f=>{
+    const guess = guessColumn(headers, f.hints);
+    const options = ['<option value="">— not present —</option>']
+      .concat(headers.map(h=>`<option value="${escapeAttr(h)}" ${h===guess?'selected':''}>${h}</option>`));
+    return `<div class="maprow"><label>${f.label}</label><select data-target="${f.key}">${options.join('')}</select></div>`;
+  }).join('');
+
+  const previewRows = data.slice(0,5);
+  const table = document.getElementById('csvPreview');
+  const fmtCell = (v)=>{
+    if(v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0,10);
+    return (v===undefined||v===null?'':v).toString().slice(0,24);
+  };
+  table.innerHTML = '<thead><tr>' + headers.map(h=>`<th>${h}</th>`).join('') + '</tr></thead>' +
+    '<tbody>' + previewRows.map(r=>'<tr>'+headers.map(h=>`<td>${fmtCell(r[h])}</td>`).join('')+'</tr>').join('') + '</tbody>';
+
+  document.getElementById('csvModalBackdrop').classList.add('show');
+}
+
+document.getElementById('btnCsvCancel').addEventListener('click', ()=>{
+  document.getElementById('csvModalBackdrop').classList.remove('show');
+  pendingCsvRows = null;
+  pendingWorkbook = null;
+});
+
+document.getElementById('btnCsvConfirm').addEventListener('click', ()=>{
+  const mapDiv = document.getElementById('mapFields');
+  const mapping = {};
+  mapDiv.querySelectorAll('select[data-target]').forEach(sel=>{
+    mapping[sel.getAttribute('data-target')] = sel.value;
+  });
+  const NON_FINISH_CODES = ['dnf','dns','dsq','dq','lap'];
+  (pendingCsvRows||[]).forEach(rec=>{
+    const posRaw = mapping.position ? rec[mapping.position] : '';
+    const dateRaw = mapping.date ? rec[mapping.date] : '';
+    const eventRaw = mapping.event ? rec[mapping.event] : '';
+    const programRaw = mapping.program ? rec[mapping.program] : '';
+    const repRaw = mapping.represented ? rec[mapping.represented] : '';
+    const date = parseDateFlexible(dateRaw);
+    if(!date && !eventRaw) return; // skip totally empty rows
+
+    const posStr = (posRaw||'').toString().trim();
+    const posLower = posStr.toLowerCase();
+    let position = '';
+    let statusSuffix = '';
+    if(NON_FINISH_CODES.includes(posLower)){
+      statusSuffix = ` — ${posStr.toUpperCase()}`;
+    } else {
+      const pos = parseInt(posStr.replace(/[^0-9]/g,''));
+      position = isNaN(pos) ? '' : pos;
+    }
+
+    const detectedTierIdx = classifyTier(eventRaw);
+    const tierIdx = detectedTierIdx > -1 ? detectedTierIdx : EVENT_TIERS.length-1;
+
+    rows.push(newRow({
+      status: 'actual',
+      event: (eventRaw||'') + (programRaw ? ` (${programRaw})` : '') + statusSuffix,
+      date: date || todayISO(),
+      position: position,
+      represented: repRaw || '',
+      tierIdx: tierIdx,
+      pointsAvailable: EVENT_TIERS[tierIdx].points,
+    }));
+  });
+  document.getElementById('csvModalBackdrop').classList.remove('show');
+  pendingCsvRows = null;
+  pendingWorkbook = null;
+  compute();
+});
+
+function parseDateFlexible(val){
+  if(!val) return '';
+  if(val instanceof Date && !isNaN(val.getTime())){
+    return val.toISOString().slice(0,10);
+  }
+  const str = val.toString().trim();
+  if(!str) return '';
+  let m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  const d = new Date(str);
+  if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+  return '';
+}
+
+/* ---------- Init ---------- */
+function init(){
+  renderRefTable();
+  if(!loadState()){
+    document.getElementById('asOfDate').value = todayISO();
+  }
+  if(!document.getElementById('asOfDate').value){
+    document.getElementById('asOfDate').value = todayISO();
+  }
+  compute();
+}
+init();
+</script>
+</body>
+</html>
