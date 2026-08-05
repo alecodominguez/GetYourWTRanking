@@ -2,7 +2,7 @@
 
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-yellow) ![No backend](https://img.shields.io/badge/backend-none%20(client--side)-lightgrey) ![License](https://img.shields.io/badge/license-MIT-green)
 
-**Try it live → [Ranking Points Calculator](https://alecojdr.us/)**
+*Try it live → * <a href="https://www.alecojdr.us" target="_blank" rel="noopener noreferrer">Ranking Points Calculator</a>
 
 A single-file, client-side web app that parses official [World Triathlon](https://www.triathlon.org/) `.xlsx` race-result exports in-browser and computes rolling, multi-year ranking-point projections — replacing the manual spreadsheet lookups triathletes otherwise have to do by hand.
 
